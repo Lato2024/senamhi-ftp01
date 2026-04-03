@@ -1,50 +1,16 @@
 const express = require("express");
-const ftp = require("basic-ftp");
+const ftpClient = require("basic-ftp");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// Acepta texto y JSON
-app.use(express.text());
-app.use(express.json());
-
-// Ruta de prueba
+// Ruta principal (prueba)
 app.get("/", (req, res) => {
   res.send("Servidor activo OK");
 });
 
-// Ruta para enviar a FTP
-app.post("/upload", async (req, res) => {
-  const client = new ftp.Client();
-
-  try {
-    let contenido;
-
-    // Detecta si viene de webhook o Apps Script
-    if (typeof req.body === "string") {
-      contenido = req.body;
-    } else if (req.body.data) {
-      contenido = req.body.data;
-    } else {
-      throw new Error("Formato inválido");
-    }
-
-    // Nombre archivo tipo SENAMHI
-    const now = new Date();
-    const fileName =
-      "EDWIN_" +
-      now.toISOString().replace(/[-:]/g, "").slice(0, 13) +
-      ".txt";
-
-    // Conexión FTP
-    await client.access({
-      host: "ftp-datos.senamhi.gob.pe",
-      user: "ftp_sutron",
-      password: "Senamhi123",
-      secure: false
-    });
-
-    // Subir archivo
-   app.get('/upload', async (req, res) => {
+// Ruta GET (para probar desde navegador)
+app.get("/upload", async (req, res) => {
   try {
     const data = req.query.data;
 
@@ -52,11 +18,14 @@ app.post("/upload", async (req, res) => {
       return res.send("Falta parámetro data");
     }
 
-    const ftp = new ftpClient();
+    const ftp = new ftpClient.Client();
+    ftp.ftp.verbose = true;
+
     await ftp.access({
       host: "ftp-datos.senamhi.gob.pe",
       user: "ftp_sutron",
-      password: "Senamhi123"
+      password: "Senamhi123",
+      secure: false
     });
 
     const fileName = `EDWIN_${Date.now()}.txt`;
@@ -72,8 +41,40 @@ app.post("/upload", async (req, res) => {
   }
 });
 
-// Puerto
-const PORT = process.env.PORT || 3000;
+// Ruta POST (para Particle o curl)
+app.use(express.text());
+
+app.post("/upload", async (req, res) => {
+  try {
+    const data = req.body;
+
+    if (!data) {
+      return res.send("No hay datos");
+    }
+
+    const ftp = new ftpClient.Client();
+    ftp.ftp.verbose = true;
+
+    await ftp.access({
+      host: "ftp-datos.senamhi.gob.pe",
+      user: "ftp_sutron",
+      password: "Senamhi123",
+      secure: false
+    });
+
+    const fileName = `EDWIN_${Date.now()}.txt`;
+
+    await ftp.uploadFrom(Buffer.from(data), fileName);
+
+    ftp.close();
+
+    res.send("Archivo enviado al FTP correctamente ✅");
+
+  } catch (err) {
+    res.send("Error: " + err.message);
+  }
+});
+
 app.listen(PORT, () => {
   console.log("Servidor corriendo en puerto " + PORT);
 });
